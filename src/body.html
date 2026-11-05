@@ -1,0 +1,60 @@
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Daily Skill Tree</div>
+      <h1 id="title">ビジネス力スキルツリー</h1>
+    </div>
+    <div class="badges">
+      <span class="badge" id="saveBadge"><i data-lucide="hard-drive"></i><span>この端末に保存</span></span>
+      <span class="badge"><i data-lucide="git-branch"></i><span id="progressTxt">0 / 36 解放</span></span>
+      <button type="button" class="badge" id="editBtn" aria-pressed="false"><i data-lucide="pencil"></i><span>編集</span></button>
+    </div>
+  </header>
+
+  <div class="tree-scroll" id="treeScroll">
+    <div class="tree">
+      <div class="watermark">SKILL TREE</div>
+      <svg class="edges" id="edges" viewBox="0 0 1000 520" preserveAspectRatio="none" aria-hidden="true"></svg>
+      <div id="labels"></div>
+      <div id="nodes"></div>
+      <canvas id="bolts" aria-hidden="true"></canvas>
+    </div>
+  </div>
+
+  <div class="points">
+    <div class="num" id="pctNum">0<small>%</small></div>
+    <div class="lbl">TREE PROGRESS</div>
+    <div class="bar"><i id="pctBar" style="width:0%"></i></div>
+    <div class="sub" id="pctTxt"></div>
+  </div>
+
+  <div class="grid">
+    <section class="panel" id="check"></section>
+    <section class="panel" id="detail" aria-live="polite"></section>
+  </div>
+
+  <section class="panel contrib">
+    <div class="phead"><h2><i data-lucide="sprout"></i>積み上げ</h2>
+      <div class="csum" id="csum"></div></div>
+    <div class="cscroll" id="cscroll"><div class="cgrid" id="cgrid"></div></div>
+    <div class="legend">少ない<span class="cell"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span>多い</div>
+  </section>
+
+  <section class="panel data">
+    <div class="phead"><h2><i data-lucide="database"></i>データ</h2></div>
+    <p id="dataNote">記録はこの端末のブラウザの中だけに保存され、外へは送りません。機種変更や別の端末で使うときは、書き出したデータを読み込んでください。</p>
+    <div class="drow">
+      <button class="btn ghost" id="copyBtn" type="button"><i data-lucide="copy"></i>コピーして書き出す</button>
+      <button class="btn ghost" id="saveBtn" type="button"><i data-lucide="download"></i>ファイルに保存</button>
+      <label class="btn ghost" for="fileIn" id="fileLbl"><i data-lucide="upload"></i>ファイルを読み込む</label>
+      <input type="file" id="fileIn" accept=".json,application/json" hidden>
+    </div>
+    <p style="margin-top:14px"><label for="importTxt">書き出したデータを貼り付けて読み込む</label></p>
+    <textarea id="importTxt" placeholder='{"v":3, ...}'></textarea>
+    <div class="drow"><button class="btn ghost" id="importBtn" type="button"><i data-lucide="file-input"></i>貼り付けたデータを読み込む</button></div>
+    <h3 class="sub-h"><i data-lucide="github"></i>GitHub Gist と同期（MCP 連携）</h3>
+    <div id="syncBox"></div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+

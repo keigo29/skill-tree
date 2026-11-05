@@ -1,0 +1,12 @@
+{
+  "name": "skilltree-mcp",
+  "version": "1.0.0",
+  "description": "スキルツリーを Claude Code などから操作する MCP サーバー",
+  "type": "module",
+  "bin": { "skilltree-mcp": "server.mjs" },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "zod": "3.25.76"
+  }
+}
