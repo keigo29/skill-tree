@@ -19,6 +19,15 @@ Claude Code（MCP サーバー）┘
 | `mcp/server.mjs` | Claude Code から操作するための MCP サーバー |
 | `src/`・`build.py` | `index.html` を作り直すときの元ファイル |
 
+## AI にツリーを作ってもらう（いちばん簡単）
+
+1. アプリの「AIでツリーを作る」に、身につけたいことを書いて「AIへの指示文をコピー」
+2. ChatGPT や Claude に貼り付けて送る
+3. 返事をそのまま「AIの返事をそのまま貼り付け」に入れ、内容を確かめて「このツリーにする」
+
+返事の前後に説明文や ```json の囲みが付いていても読めます。必要回数は、1年で最終スキルに届く回数をアプリが自動で決めます。
+JSON の例は `examples/tree-example.json` にあります。Claude Code からは MCP の `import_tree` で同じことができます。
+
 ## 1. アプリを公開する（GitHub Pages）
 
 1. GitHub で新しいリポジトリ（例：`skill-tree`）を作り、このフォルダの中身を push する
@@ -59,6 +68,8 @@ Gist を使わずに試すときは、`GITHUB_TOKEN` と `SKILLTREE_GIST_ID` を
 | `record_goal` | 達成目標に記録を入れる（目標に届けば達成） |
 | `set_day_off` | 休みの日にする（連続記録が途切れない） |
 | `get_history` | 日ごとのチェック数（草グラフの中身） |
+| `import_tree` | JSON でツリーを丸ごと入れかえる（AI の返事をそのまま渡せる） |
+| `get_tree_format` | ツリーの JSON の形式（AI への指示文） |
 | `new_tree` | 空のツリー／見本のツリーで作り直す（`confirm:true` が必要） |
 | `add_branch` | 系統を追加（6つのスキルをまとめて渡せる） |
 | `update_branch` / `update_skill` | 系統・スキルの中身を変える |

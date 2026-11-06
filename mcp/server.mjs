@@ -163,6 +163,19 @@ server.registerTool('new_tree', { title: 'ツリーを作り直す', description
   annotations: { destructiveHint: true } },
   async ({ mode, title }) => { const st = K.newTree(mode, title); await save(st); return ok(`${mode === 'blank' ? '空のツリー' : '見本のツリー'}で作り直しました。\n\n` + overview(st)); });
 
+server.registerTool('import_tree', { title: 'JSON でツリーを入れかえる', description: 'title と branches（各系統に6つの skills）を持つ JSON 文字列でツリーを丸ごと入れかえる。形式は get_tree_format で確認できる。keep_records=true なら同じ名前の系統の記録を引き継ぐ。confirm=true が必要',
+  inputSchema: { tree_json: z.string().describe('ツリーの JSON（AI の返事をそのまま渡してもよい）'), keep_records: z.boolean().default(true), confirm: z.literal(true) },
+  annotations: { destructiveHint: true } },
+  async ({ tree_json, keep_records }) => {
+    const t = K.parseTree(tree_json); if (!t.ok) return fail(t.error);
+    const r = await mutate(st => K.applyTree(st, t, keep_records));
+    return ok(`ツリーを入れかえました（${t.branches.length}系統・${t.skills}スキル）${r.kept.length ? `。記録を引き継いだ系統：${r.kept.join('・')}` : ''}${t.notes.length ? '\n' + t.notes.join('\n') : ''}\n\n` + overview(r.st));
+  });
+
+server.registerTool('get_tree_format', { title: 'ツリーの JSON の形式', description: 'import_tree に渡す JSON の形式とルール（AI にツリーを作らせるときの指示文）を返す',
+  inputSchema: { wish: z.string().optional().describe('身につけたいこと（指示文に入る）') }, annotations: { readOnlyHint: true } },
+  async ({ wish }) => ok(K.prompt(wish)));
+
 server.registerTool('set_title', { title: 'タイトルを変える', inputSchema: { title: z.string().min(1).max(40) } },
   async ({ title }) => { await mutate(st => ({ st: K.setTitle(st, title) })); return ok(`タイトルを「${title}」にしました`); });
 

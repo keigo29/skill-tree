@@ -207,6 +207,22 @@ button.badge.on{background:var(--accent);border-color:var(--accent);color:#1b140
 #syncBox{margin-top:6px}
 .sub-h{margin:18px 0 0;font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px}
 .sub-h svg{width:16px;height:16px;color:var(--accent)}
+.steps{margin:12px 0 0;padding-left:1.4em;display:flex;flex-direction:column;gap:18px}
+.steps li::marker{color:var(--accent);font-family:var(--font-label);font-weight:600}
+.steps .fld{margin-bottom:-2px}
+.ai textarea{min-height:0}
+.aiPrev{margin-top:10px;font-size:13px;color:var(--ink-dim)}
+.aiPrev .ok{color:var(--ok);font-weight:700;display:flex;align-items:center;gap:6px}
+.aiPrev .ok svg,.aiPrev .err svg{width:16px;height:16px;flex:none}
+.aiPrev .err{color:var(--bad);display:flex;align-items:center;gap:6px}
+.aiPrev ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.aiPrev li{display:flex;gap:8px;align-items:baseline;min-width:0}
+.aiPrev li b{color:var(--ink);flex:none}
+.aiPrev li span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aiPrev .dot{width:9px;height:9px;border-radius:50%;flex:none;align-self:center}
+.aiPrev .note{color:var(--accent);margin-top:6px}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-dim);margin-top:10px;cursor:pointer}
+.chk input{width:16px;height:16px;accent-color:var(--accent)}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;pointer-events:none;
   background:var(--ink);color:#1b1e26;font-weight:700;padding:10px 18px;border-radius:12px;transition:.3s;display:flex;gap:8px;align-items:center;font-size:14px;max-width:calc(100% - 32px);z-index:20}
 .toast svg{width:18px;height:18px;flex:none}

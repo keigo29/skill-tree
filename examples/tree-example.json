@@ -1,0 +1,16 @@
+{
+  "title": "営業で信頼される人になる",
+  "branches": [
+    {
+      "name": "英語", "en": "ENGLISH", "color": "#86ace0",
+      "skills": [
+        { "name": "単語に触れる", "icon": "languages", "desc": "毎日少しずつ語彙を増やす。", "act": "英単語を10個覚える", "freq": "d" },
+        { "name": "音読", "icon": "mic", "desc": "口を動かして英語の回路をつくる。", "act": "英文を5分音読する", "freq": "d" },
+        { "name": "リスニング", "icon": "headphones", "desc": "耳を英語の速さに慣らす。", "act": "英語の音声を15分聞く", "freq": "w3" },
+        { "name": "英文メール", "icon": "mail", "desc": "仕事で使う型を身につける。", "act": "英文メールを1通書いてみる", "freq": "w2" },
+        { "name": "オンライン英会話", "icon": "messages-square", "desc": "話す場数を踏む。", "act": "オンライン英会話を1回受ける", "freq": "w2" },
+        { "name": "TOEIC 800点", "icon": "trophy", "desc": "積み重ねを数字で確かめる。", "act": "TOEICで800点を取る", "freq": "g", "goalTarget": 800, "goalUnit": "点", "goalDir": "up" }
+      ]
+    }
+  ]
+}

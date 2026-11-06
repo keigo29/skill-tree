@@ -239,6 +239,7 @@ function renderEditor(n){
       <h3>作り直す</h3>
       <button type="button" class="btn danger" id="newBlank"><i data-lucide="eraser"></i>空のツリーからゼロで作る</button>
       <button type="button" class="btn ghost" id="newTpl"><i data-lucide="layout-template"></i>見本のツリーで作り直す</button>
+      <button type="button" class="btn ghost" id="goAi"><i data-lucide="wand-sparkles"></i>AIに作ってもらう</button>
       <p class="hint" style="margin:0">作り直すと、今の系統と記録はすべて消えます。先に「データ」から書き出しておくと安心です。</p>
     </div>`;
     return;
@@ -345,6 +346,9 @@ document.addEventListener('click',e=>{
     case 'delBranch': twoStep(t,'<i data-lucide="trash-2"></i>この系統を削除',()=>{ const r=K.deleteBranch(state,C.NODES[selected].branch.key); selected='root'; commit(r.st); toast(`「${r.name}」を削除しました`,'trash-2'); }); break;
     case 'newBlank': twoStep(t,'<i data-lucide="eraser"></i>空のツリーからゼロで作る',()=>{ selected='root'; editing=true; commit(K.newTree('blank')); toast('空のツリーにしました。「系統を追加」から作りましょう','eraser'); }); break;
     case 'newTpl': twoStep(t,'<i data-lucide="layout-template"></i>見本のツリーで作り直す',()=>{ selected='root'; commit(K.newTree('template')); toast('見本のツリーで作り直しました','layout-template'); }); break;
+    case 'goAi': $('aiPanel').scrollIntoView({behavior:'smooth',block:'start'}); setTimeout(()=>$('aiWish').focus({preventScroll:true}),400); break;
+    case 'aiCopy': copyPrompt(); break;
+    case 'aiApply': if(aiTree) twoStep(t,'<i data-lucide="sparkles"></i>このツリーにする',applyAi); break;
     case 'sConnect': connectGist(); break;
     case 'sNow': pull().then(push); break;
     case 'sCopy': try{ navigator.clipboard.writeText(sync.gistId).then(()=>toast('Gist ID をコピーしました','copy'),()=>selectText('gidTxt')); }catch(err){ selectText('gidTxt'); } break;
@@ -357,6 +361,35 @@ document.addEventListener('change',e=>{
   else if(t.dataset.b) editBranch(t.dataset.b,t.value);
   else if(t.dataset.f==='title'){ const v=t.value; later(()=>commit(K.setTitle(state,v))); }
 });
+// ---- AIでツリーを作る ----
+let aiTree=null;
+function copyPrompt(){
+  const txt=K.prompt($('aiWish').value), out=$('aiPromptOut');
+  const show=()=>{ out.hidden=false; out.value=txt; out.focus(); out.select(); toast('下の欄の指示文を全選択してコピーしてください','clipboard-copy'); };
+  try{ navigator.clipboard.writeText(txt).then(()=>{ out.hidden=true; toast('指示文をコピーしました。AIに貼り付けて送ってください','clipboard-copy'); },show); }catch(e){ show(); }
+}
+function previewAi(){
+  const raw=$('aiPaste').value, box=$('aiPreview'), btn=$('aiApply');
+  if(!raw.trim()){ aiTree=null; box.innerHTML=''; btn.disabled=true; return; }
+  const r=K.parseTree(raw);
+  if(!r.ok){ aiTree=null; btn.disabled=true; box.innerHTML=`<div class="err"><i data-lucide="circle-alert"></i>${esc(r.error)}</div>`; icons(); return; }
+  aiTree=r; btn.disabled=false;
+  const goals=r.branches.reduce((a,b)=>a+SLOTS.filter(s=>b.nodes[s].freq==='g').length,0);
+  box.innerHTML=`<div class="ok"><i data-lucide="circle-check"></i>${r.title?`「${esc(r.title)}」 ・ `:''}${r.branches.length}系統・${r.skills}スキルを読み取りました${goals?`（達成目標 ${goals}）`:''}</div>
+    <ul>${r.branches.map(b=>`<li><i class="dot" style="background:${b.color}"></i><b>${esc(b.name)}</b><span>${SLOTS.map(s=>esc(b.nodes[s].name)).join(' → ')}</span></li>`).join('')}</ul>
+    ${r.notes.map(n=>`<div class="note">${esc(n)}</div>`).join('')}`;
+  icons();
+}
+function applyAi(){
+  const r=K.applyTree(state,aiTree,$('aiKeep').checked);
+  $('aiApply').innerHTML='<i data-lucide="sparkles"></i>このツリーにする';
+  selected='root'; selDay=todayKey(); commit(r.st);
+  $('aiPaste').value=''; previewAi();
+  window.scrollTo({top:0,behavior:'smooth'});
+  toast(r.kept.length?`新しいツリーにしました（${r.kept.join('・')}の記録を引き継ぎ）`:'新しいツリーにしました','sparkles');
+}
+$('aiPaste').addEventListener('input',previewAi);
+
 function selectText(id){ const el=$(id); if(!el) return; const r=document.createRange(); r.selectNodeContents(el); const s=getSelection(); s.removeAllRanges(); s.addRange(r); toast('選択しました。コピーしてください','copy'); }
 async function connectGist(){
   const token=$('sTok').value.trim(), gid=$('sGist').value.trim().replace(/^.*gist\.github\.com\/(?:[^/]+\/)?/,'').replace(/[^\w]/g,'');

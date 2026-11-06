@@ -40,6 +40,27 @@
     <div class="legend">少ない<span class="cell"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span>多い</div>
   </section>
 
+  <section class="panel data ai" id="aiPanel">
+    <div class="phead"><h2><i data-lucide="wand-sparkles"></i>AIでツリーを作る</h2></div>
+    <p>ChatGPT や Claude にツリーを考えてもらい、返事を貼り付けるだけで入れかえられます。</p>
+    <ol class="steps">
+      <li>
+        <label class="fld" for="aiWish"><span>身につけたいこと・なりたい姿</span></label>
+        <textarea id="aiWish" rows="3" placeholder="例：営業で信頼される人になりたい。英語で会議に出られるようになりたい。ベンチプレス100kgを挙げたい。"></textarea>
+        <div class="drow"><button class="btn" id="aiCopy" type="button"><i data-lucide="clipboard-copy"></i>AIへの指示文をコピー</button></div>
+        <textarea id="aiPromptOut" rows="6" readonly hidden aria-label="AIへの指示文"></textarea>
+        <p class="hint">コピーした指示文を ChatGPT や Claude に貼り付けて送ります。</p>
+      </li>
+      <li>
+        <label class="fld" for="aiPaste"><span>AIの返事をそのまま貼り付け</span></label>
+        <textarea id="aiPaste" rows="5" placeholder='{"title": "...", "branches": [ ... ]}'></textarea>
+        <div id="aiPreview" class="aiPrev"></div>
+        <label class="chk"><input type="checkbox" id="aiKeep" checked> 同じ名前の系統は、今までの記録を引き継ぐ</label>
+        <div class="drow"><button class="btn" id="aiApply" type="button" disabled><i data-lucide="sparkles"></i>このツリーにする</button></div>
+      </li>
+    </ol>
+  </section>
+
   <section class="panel data">
     <div class="phead"><h2><i data-lucide="database"></i>データ</h2></div>
     <p id="dataNote">記録はこの端末のブラウザの中だけに保存され、外へは送りません。機種変更や別の端末で使うときは、書き出したデータを読み込んでください。</p>

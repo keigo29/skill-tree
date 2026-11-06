@@ -290,7 +290,82 @@
     return stamp(s);
   }
 
-  return { SLOTS, LEVEL, PARENTS, FREQ, RATE, SPAN, MAX_BRANCHES, yearNeed, W, H, CX, CY, pt,
+  // ================= AI が作ったツリーを読む =================
+  const PROMPT = `あなたは成長計画を作るコーチです。下の「身につけたいこと」をもとに、スキルツリーを JSON だけで出力してください。JSON の前後に説明文は書かないでください。
+
+身につけたいこと：
+{{WISH}}
+
+ルール
+- branches（系統）は1〜6個。各系統の skills はちょうど6個で、順番は「1段目 → 2段目A → 2段目B → 3段目A → 3段目B → 最終」。
+- 1段目はすぐ始められること、最終は1年かけて届くゴールにする。
+- act は毎日確認でチェックする具体的な行動を1文で書く（60文字くらい。「〜する」で終える）。
+- freq は d（毎日）/ w1・w2・w3（週1〜3回）/ m1（月1回）/ g（達成目標）のどれか。
+- 数字で測れるゴール（例：ベンチプレス100kg、TOEIC800点、体脂肪率15%）は freq を g にし、goalTarget（数値）・goalUnit（単位）・goalDir（up＝この数値以上で達成、down＝この数値以下で達成）を入れる。
+- icon は Lucide のアイコン名（例：dumbbell, brain, target, book-open, messages-square, languages, heart, shield）。
+- 系統の name は10文字以内、en は英大文字。スキルの name は20文字以内、desc は60文字以内。
+- need は書かない（アプリが1年で届く回数を自動で決める）。
+
+形式
+{
+  "title": "ツリーの名前",
+  "branches": [
+    {
+      "name": "系統名", "en": "ENGLISH", "color": "#86ace0",
+      "skills": [
+        { "name": "スキル名", "icon": "eye", "desc": "説明", "act": "確認すること", "freq": "d" },
+        { "name": "スキル名", "icon": "target", "desc": "説明", "act": "確認すること", "freq": "g", "goalTarget": 100, "goalUnit": "kg", "goalDir": "up" }
+      ]
+    }
+  ]
+}`;
+  const prompt = wish => PROMPT.replace('{{WISH}}', String(wish || '').trim() || '（ここに身につけたいことを書く）');
+
+  // AI の返事（前後の文章や \`\`\`json の囲みがあってもよい）からツリーを取り出す
+  function parseTree(text) {
+    let raw = String(text || '').trim();
+    if (!raw) return { ok: false, error: 'AIの返事が空です' };
+    const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i); if (fence) raw = fence[1];
+    const a = Math.min(...['{', '['].map(c => { const i = raw.indexOf(c); return i < 0 ? Infinity : i; }));
+    const z = Math.max(raw.lastIndexOf('}'), raw.lastIndexOf(']'));
+    if (!Number.isFinite(a) || z < a) return { ok: false, error: 'JSON が見つかりません。AIの返事をそのまま貼り付けてください' };
+    let d;
+    try { d = JSON.parse(raw.slice(a, z + 1).replace(/,\s*([}\]])/g, '$1')); }
+    catch (e) { return { ok: false, error: 'JSON の形が崩れています。AIに「正しいJSONだけで出し直して」と頼んでください' }; }
+    const list = Array.isArray(d) ? d : Array.isArray(d.branches) ? d.branches : Array.isArray(d.tree) ? d.tree : null;
+    if (!list || !list.length) return { ok: false, error: 'branches（系統）が入っていません' };
+    const notes = [];
+    if (list.length > MAX_BRANCHES) notes.push(`系統が${list.length}個あったので、最初の${MAX_BRANCHES}個を使います`);
+    const branches = list.slice(0, MAX_BRANCHES).map((b, i) => {
+      b = b || {};
+      let skills = Array.isArray(b.skills) ? b.skills : Array.isArray(b.nodes) ? b.nodes : b.nodes && typeof b.nodes === 'object' ? SLOTS.map(s => b.nodes[s]) : [];
+      skills = skills.filter(Boolean);
+      if (skills.length > 6) notes.push(`「${b.name || '系統' + (i + 1)}」はスキルが${skills.length}個あったので、6個にしました`);
+      if (skills.length < 6) notes.push(`「${b.name || '系統' + (i + 1)}」はスキルが${skills.length}個だったので、足りない分を仮の名前で作りました`);
+      const nodes = {};
+      SLOTS.forEach((s, j) => { const n = skills[j] || {};
+        nodes[s] = { ...n, goalTarget: n.goalTarget ?? n.goal_target, goalUnit: n.goalUnit ?? n.goal_unit, goalDir: n.goalDir ?? n.goal_dir,
+          act: n.act ?? n.action ?? n.check, need: n.need, freq: FREQ[n.freq] ? n.freq : (n.goalTarget ?? n.goal_target) != null ? 'g' : n.freq }; });
+      return cleanBranch({ key: '', name: b.name, en: b.en ? String(b.en).toUpperCase() : '', color: b.color, nodes }, i);
+    });
+    const title = typeof d.title === 'string' && d.title.trim() ? d.title.trim().slice(0, 40) : '';
+    return { ok: true, title, branches, notes, skills: branches.length * 6 };
+  }
+  // 読み取ったツリーにする。keep=true なら、同じ名前の系統は記録を引き継ぐ
+  function applyTree(st, tree, keep) {
+    const s = clone(st), old = s.branches, used = new Set();
+    const branches = tree.branches.map(b => { const nb = clone(b);
+      const same = keep && old.find(o => o.name === nb.name && !used.has(o.key));
+      if (same) { nb.key = same.key; used.add(same.key); } else nb.key = newKey() + used.size;
+      used.add(nb.key); return nb; });
+    s.branches = branches; if (tree.title) s.title = tree.title;
+    const ids = new Set(branches.flatMap(b => SLOTS.map(x => b.key + x)));
+    for (const f of ['checks', 'unlocked', 'records']) for (const id in s[f]) if (!keep || !ids.has(id)) delete s[f][id];
+    if (!keep) s.off = {};
+    return { st: stamp(s), status: 'applied', kept: branches.filter(b => old.some(o => o.key === b.key)).map(b => b.name) };
+  }
+
+  return { PROMPT, prompt, parseTree, applyTree, SLOTS, LEVEL, PARENTS, FREQ, RATE, SPAN, MAX_BRANCHES, yearNeed, W, H, CX, CY, pt,
     keyOf, parseKey, addDays, todayKey, monOf, isDate, clone,
     fresh, blank, normalize, ctx, applyCheck, applyRecord, setOff, setTitle, addBranch, updateBranch, updateSkill, deleteBranch, yearAll, newTree, merge };
 });
