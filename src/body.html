@@ -47,6 +47,10 @@
       <li>
         <label class="fld" for="aiWish"><span>身につけたいこと・なりたい姿</span></label>
         <textarea id="aiWish" rows="3" placeholder="例：営業で信頼される人になりたい。英語で会議に出られるようになりたい。ベンチプレス100kgを挙げたい。"></textarea>
+        <div class="two" style="margin-top:10px">
+          <label class="fld"><span>期間（最終スキルまで）</span><select id="aiMonths"><option value="1">1か月</option><option value="3">3か月</option><option value="6">半年</option><option value="12" selected>1年</option><option value="24">2年</option></select></label>
+          <label class="fld"><span>作り方</span><select id="aiStyle"><option value="mix" selected>習慣とゴールを組み合わせる</option><option value="habit">毎日の習慣が中心</option><option value="goal">ゴール達成で進む</option></select></label>
+        </div>
         <div class="drow"><button class="btn" id="aiCopy" type="button"><i data-lucide="clipboard-copy"></i>AIへの指示文をコピー</button></div>
         <textarea id="aiPromptOut" rows="6" readonly hidden aria-label="AIへの指示文"></textarea>
         <p class="hint">コピーした指示文を ChatGPT や Claude に貼り付けて送ります。</p>

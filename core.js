@@ -15,7 +15,13 @@
   const SPAN = [30, 80, 110, 145]; // 1段ごとの目安日数（合計365日で最終スキル）
   const MAX_BRANCHES = 6;
   // 8割できれば1年で最終スキルに届く回数
-  const yearNeed = (lv, f) => (f === 'g' ? 1 : Math.max(1, Math.round(SPAN[lv - 1] * RATE[f] * 0.8)));
+  // 期間（日数）に合わせた必要回数。8割のペースで続けると、期間の終わりに最終スキルへ届く
+  const needFor = (lv, f, days) => (f === 'g' ? 1 : Math.max(1, Math.round(SPAN[lv - 1] * (days || 365) / 365 * RATE[f] * 0.8)));
+  const yearNeed = (lv, f) => needFor(lv, f, 365);
+  const PERIODS = { 30: '1か月', 91: '3か月', 182: '半年', 365: '1年', 730: '2年' };
+  const clampPeriod = d => Math.max(14, Math.min(1095, Math.round(+d) || 365));
+  const periodLabel = d => PERIODS[d] || (d % 30 < 3 || d % 30 > 27 ? `${Math.round(d / 30.4)}か月` : `${d}日`);
+  const monthsToDays = m => clampPeriod({ 1: 30, 3: 91, 6: 182, 12: 365, 24: 730 }[m] || m * 30.4);
 
   // ================= 日付 =================
   const pad = n => String(n).padStart(2, '0');
@@ -82,13 +88,13 @@
         return [s, { icon, name, desc, act, freq, need: yearNeed(LEVEL[s], freq), ...(extra || {}) }]; })) }));
   }
   function emptyState(title) {
-    return { v: 4, title: title || 'ビジネス力スキルツリー', branches: [], checks: {}, unlocked: {}, off: {}, records: {}, updatedAt: '' };
+    return { v: 4, title: title || 'ビジネス力スキルツリー', period: 365, branches: [], checks: {}, unlocked: {}, off: {}, records: {}, updatedAt: '' };
   }
   function fresh() { const s = emptyState(); s.branches = templateBranches(); return s; }
   function blank(title) { return emptyState(title || 'わたしのスキルツリー'); }
   const newKey = () => 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
-  function cleanNode(n, s) {
+  function cleanNode(n, s, days) {
     n = n || {};
     const freq = FREQ[n.freq] ? n.freq : 'd';
     const gt = n.goalTarget === '' || n.goalTarget == null || !Number.isFinite(+n.goalTarget) ? null : +n.goalTarget;
@@ -98,15 +104,16 @@
       desc: String(n.desc || '').slice(0, 200),
       act: String(n.act || '').slice(0, 120),
       freq,
-      need: freq === 'g' ? 1 : Math.max(1, Math.min(999, parseInt(n.need, 10) || yearNeed(LEVEL[s], freq))),
-      goalTarget: gt, goalUnit: String(n.goalUnit || '').slice(0, 10), goalDir: n.goalDir === 'down' ? 'down' : 'up'
+      need: freq === 'g' ? 1 : Math.max(1, Math.min(999, parseInt(n.need, 10) || needFor(LEVEL[s], freq, days))),
+      goalTarget: gt, goalUnit: String(n.goalUnit || '').slice(0, 10), goalDir: n.goalDir === 'down' ? 'down' : 'up',
+      metric: freq === 'g' ? String(n.metric || '').trim().slice(0, 20) : ''
     };
   }
-  function cleanBranch(b, i) {
+  function cleanBranch(b, i, days) {
     b = b || {};
     const key = String(b.key || '').replace(/[^\w-]/g, '').slice(0, 24) || newKey();
     const nodes = {};
-    SLOTS.forEach(s => { nodes[s] = cleanNode(b.nodes && b.nodes[s], s); });
+    SLOTS.forEach(s => { nodes[s] = cleanNode(b.nodes && b.nodes[s], s, days); });
     return { key, name: String(b.name || '新しい系統').slice(0, 20), en: String(b.en || '').slice(0, 20),
       color: /^#[0-9a-f]{6}$/i.test(b.color) ? b.color : PALETTE[(i || 0) % PALETTE.length], nodes };
   }
@@ -115,9 +122,10 @@
     if (!d || typeof d !== 'object') return fresh();
     const s = emptyState();
     if (typeof d.title === 'string' && d.title.trim()) s.title = d.title.slice(0, 40);
+    if (d.period != null) s.period = clampPeriod(d.period);
     if (Array.isArray(d.branches)) {
       const seen = new Set();
-      s.branches = d.branches.slice(0, MAX_BRANCHES).map(cleanBranch).filter(b => !seen.has(b.key) && seen.add(b.key));
+      s.branches = d.branches.slice(0, MAX_BRANCHES).map((b, i) => cleanBranch(b, i, s.period)).filter(b => !seen.has(b.key) && seen.add(b.key));
     } else s.branches = templateBranches(); // 系統を持たない古いデータ
     const ids = new Set(s.branches.flatMap(b => SLOTS.map(x => b.key + x)));
     if (d.checks && typeof d.checks === 'object') for (const id in d.checks) {
@@ -131,7 +139,7 @@
     }
     if (d.off && typeof d.off === 'object') for (const k in d.off) if (d.off[k] && isDate(k)) s.off[k] = true;
     if (d.records && typeof d.records === 'object') for (const id in d.records) {
-      const r = d.records[id]; if (ids.has(id) && r && Number.isFinite(+r.value) && isDate(r.date)) s.records[id] = { value: +r.value, date: r.date };
+      const r = d.records[id]; if ((ids.has(id) || /^m:.+/.test(id)) && r && Number.isFinite(+r.value) && isDate(r.date)) s.records[id] = { value: +r.value, date: r.date };
     }
     if (d.done && typeof d.done === 'object') for (const k in d.done) { // 古い形式
       if (!isDate(k) || !Array.isArray(d.done[k])) continue;
@@ -182,7 +190,8 @@
       if (len) out.push(len); return out; };
     const streak = () => { let k = todayKey(), c = 0; if (!hasCheck(k)) k = addDays(k, -1);
       for (let i = 0; i < 4000; i++) { if (hasCheck(k)) c++; else if (!st.off[k]) break; k = addDays(k, -1); } return c; };
-    const rec = id => st.records[id] || null;
+    const recKey = nd => (nd.metric ? 'm:' + nd.metric : nd.id);
+    const rec = id => { const nd = NODES[id]; return (nd ? st.records[recKey(nd)] : st.records[id]) || null; };
     const goalMet = (nd, v) => nd.goalTarget != null && (nd.goalDir === 'down' ? v <= nd.goalTarget : v >= nd.goalTarget);
     const goalPct = nd => { const r = rec(nd.id); if (nd.goalTarget == null || !r) return 0;
       if (nd.goalDir === 'down') return r.value <= nd.goalTarget ? 100 : Math.max(0, Math.round(nd.goalTarget / r.value * 100));
@@ -195,7 +204,7 @@
         caps: st.branches.filter(b => isOn(b.key + '4')).length, branches: st.branches.length };
     };
     return { st, NODES, ALL, SKILLS, isOn, isActive, count, pctOf, quota, weekCount, keyFor, checkedOn, satisfied, activeNodes, itemsOn,
-      perDay: () => hasCheckMap, hasCheck, runs, streak, rec, goalMet, goalPct, eta, progress };
+      perDay: () => hasCheckMap, hasCheck, runs, streak, rec, recKey, goalMet, goalPct, eta, progress };
   }
 
   // ================= 変更（新しい状態を返す） =================
@@ -221,9 +230,29 @@
     if (target && !s.unlocked[id] && n2 >= nd.need) { s.unlocked[id] = today; newly = id; }
     // 間違えて外したとき：今日解放したばかりで、次の段にまだチェックがなければ解放を取り消す
     if (!target && s.unlocked[id] === today && n2 < nd.need && !c.SKILLS.some(x => x.parents.includes(id) && c.count(x.id))) delete s.unlocked[id];
+    const chain = newly ? cascade(s, today) : [];
     stamp(s);
-    const nexts = newly ? ctx(s).SKILLS.filter(x => x.parents.includes(newly) && ctx(s).isActive(x.id)).map(x => x.name) : [];
-    return { st: s, status: target ? 'checked' : 'unchecked', checked: target, newly, nexts };
+    return { st: s, status: target ? 'checked' : 'unchecked', checked: target, newly, chain, nexts: nextsOf(s, [newly, ...chain]) };
+  }
+  // 解放できる状態になっているスキルを、続けてまとめて解放する（記録を共有する目標など）
+  function cascade(s, today) {
+    const out = [];
+    for (let guard = 0; guard < 60; guard++) {
+      const c = ctx(s);
+      const x = c.SKILLS.find(n => c.isActive(n.id) && (n.freq === 'g'
+        ? n.goalTarget != null && c.rec(n.id) && c.goalMet(n, c.rec(n.id).value)
+        : c.count(n.id) >= n.need));
+      if (!x) break;
+      s.unlocked[x.id] = today;
+      if (x.freq === 'g') (s.checks[x.id] = s.checks[x.id] || {}).G = today;
+      out.push(x.id);
+    }
+    return out;
+  }
+  function nextsOf(s, ids) {
+    ids = ids.filter(Boolean); if (!ids.length) return [];
+    const c = ctx(s);
+    return c.SKILLS.filter(x => c.isActive(x.id) && x.parents.some(p => ids.includes(p))).map(x => x.name);
   }
   function applyRecord(st, id, value, today) {
     today = today || todayKey();
@@ -231,12 +260,11 @@
     if (!nd || nd.freq !== 'g') return { st, status: 'notgoal' };
     const v = +value; if (!Number.isFinite(v)) return { st, status: 'badvalue' };
     const prev = c.rec(id), better = !prev || (nd.goalDir === 'down' ? v < prev.value : v > prev.value);
-    let s = clone(st);
-    if (better) s.records[id] = { value: v, date: today };
+    const s = clone(st);
+    if (better) s.records[c.recKey(nd)] = { value: v, date: today };
+    const got = cascade(s, today);
     stamp(s);
-    let res = { st: s, status: 'recorded', better, best: better ? v : prev.value };
-    if (c.goalMet(nd, v) && c.isActive(id)) { const r = applyCheck(s, id, today, true, today); res = { ...res, st: r.st, newly: r.newly, nexts: r.nexts, achieved: r.status === 'checked' }; }
-    return res;
+    return { st: s, status: 'recorded', better, best: better ? v : prev.value, newly: got[0] || null, chain: got.slice(1), nexts: nextsOf(s, got), achieved: got.includes(id) };
   }
   function setOff(st, day, off) { const s = clone(st); if (off) s.off[day] = true; else delete s.off[day]; return stamp(s); }
   function setTitle(st, title) { const s = clone(st); s.title = String(title || '').trim().slice(0, 40) || 'スキルツリー'; return stamp(s); }
@@ -261,11 +289,10 @@
     const c = ctx(st), nd = c.NODES[id]; if (!nd || id === 'root') return { st, status: 'notfound' };
     const s = clone(st), b = s.branches.find(x => x.key === nd.branch.key), cur = b.nodes[nd.slot];
     const next = { ...cur, ...f };
-    if (f.freq && f.freq !== cur.freq && f.need == null) next.need = yearNeed(nd.level, f.freq);
-    b.nodes[nd.slot] = cleanNode(next, nd.slot);
-    let newly = null;
-    if (c.isActive(id) && c.count(id) >= b.nodes[nd.slot].need) { s.unlocked[id] = todayKey(); newly = id; }
-    return { st: stamp(s), status: 'updated', newly };
+    if (f.freq && f.freq !== cur.freq && f.need == null) next.need = needFor(nd.level, f.freq, s.period);
+    b.nodes[nd.slot] = cleanNode(next, nd.slot, s.period);
+    const got = cascade(s, todayKey());
+    return { st: stamp(s), status: 'updated', newly: got[0] || null, chain: got.slice(1) };
   }
   function deleteBranch(st, key) {
     const s = clone(st), b = s.branches.find(x => x.key === key); if (!b) return { st, status: 'notfound' };
@@ -273,7 +300,11 @@
     s.branches = s.branches.filter(x => x.key !== key);
     return { st: stamp(s), status: 'deleted', name: b.name };
   }
-  function yearAll(st) { const s = clone(st); s.branches.forEach(b => SLOTS.forEach(sl => { b.nodes[sl].need = yearNeed(LEVEL[sl], b.nodes[sl].freq); })); return stamp(s); }
+  // 必要回数を期間どおりに計算し直す（チェック回数はそのまま。届いていれば解放）
+  function resetNeeds(st) { const s = clone(st); s.branches.forEach(b => SLOTS.forEach(sl => { b.nodes[sl].need = needFor(LEVEL[sl], b.nodes[sl].freq, s.period); }));
+    const got = cascade(s, todayKey()); return { st: stamp(s), unlocked: got }; }
+  const yearAll = st => resetNeeds(st).st;
+  function setPeriod(st, days) { const s = clone(st); s.period = clampPeriod(days); return resetNeeds(s); }
   function newTree(mode, title) { const s = mode === 'template' ? fresh() : blank(title); if (title) s.title = String(title).slice(0, 40); return stamp(s); }
 
   // 2か所で同時に変わったときの合わせ方：中身（系統）は新しい方、記録は両方を足し合わせる
@@ -285,42 +316,61 @@
     for (const id in older.unlocked) if (ids.has(id) && (!s.unlocked[id] || older.unlocked[id] < s.unlocked[id])) s.unlocked[id] = older.unlocked[id];
     for (const k in older.off) s.off[k] = true;
     const c = ctx(s);
-    for (const id in older.records) { if (!ids.has(id)) continue; const o = older.records[id], n = s.records[id], nd = c.NODES[id];
-      if (!n || (nd.goalDir === 'down' ? o.value < n.value : o.value > n.value)) s.records[id] = o; }
+    for (const id in older.records) {
+      const nd = id.startsWith('m:') ? c.SKILLS.find(x => 'm:' + x.metric === id) : c.NODES[id]; if (!nd && !id.startsWith('m:')) continue;
+      const o = older.records[id], n = s.records[id], down = nd && nd.goalDir === 'down';
+      if (!n || (down ? o.value < n.value : o.value > n.value)) s.records[id] = o; }
     return stamp(s);
   }
 
   // ================= AI が作ったツリーを読む =================
-  const PROMPT = `あなたは成長計画を作るコーチです。下の「身につけたいこと」をもとに、スキルツリーを JSON だけで出力してください。JSON の前後に説明文は書かないでください。
+  const STYLES = {
+    mix: '習慣スキルと達成目標スキルを組み合わせる。1段目・2段目は習慣スキル、3段目は習慣か達成目標、最終は達成目標にする。',
+    habit: 'ほとんどを習慣スキルで作る。毎日・毎週の行動を積み上げ、最終だけ達成目標にしてもよい。',
+    goal: 'すべて達成目標スキル（freq: g）で作る。段が進むごとに目標を引き上げる（例：過去問60%→70%→合格、ベンチプレス60kg→80kg→100kg）。同じ数字を追う目標には同じ metric を付ける。'
+  };
+  const PROMPT = `あなたは成長計画を作るコーチです。下の条件で、チェックを積み上げて解放していくスキルツリーを作り、JSON だけを出力してください。
 
 身につけたいこと：
 {{WISH}}
 
-ルール
-- branches（系統）は1〜6個。各系統の skills はちょうど6個で、順番は「1段目 → 2段目A → 2段目B → 3段目A → 3段目B → 最終」。
-- 1段目はすぐ始められること、最終は1年かけて届くゴールにする。
-- act は毎日確認でチェックする具体的な行動を1文で書く（60文字くらい。「〜する」で終える）。
-- freq は d（毎日）/ w1・w2・w3（週1〜3回）/ m1（月1回）/ g（達成目標）のどれか。
-- 数字で測れるゴール（例：ベンチプレス100kg、TOEIC800点、体脂肪率15%）は freq を g にし、goalTarget（数値）・goalUnit（単位）・goalDir（up＝この数値以上で達成、down＝この数値以下で達成）を入れる。
-- icon は Lucide のアイコン名（例：dumbbell, brain, target, book-open, messages-square, languages, heart, shield）。
+期間：{{MONTHS}}か月（最終スキルに{{MONTHS}}か月で届くようにする）
+作り方：{{STYLE}}
+
+このアプリのしくみ
+- branches（系統）は1〜6個。各系統の skills はちょうど6個で、順番は「1段目 → 2段目A → 2段目B → 3段目A → 3段目B → 最終」。1段目から2段目A・Bへ、2段目Aから3段目A、2段目Bから3段目Bへつながり、最終は3段目AとBの両方を解放すると挑戦できる。
+- スキルは2種類。
+  1. 習慣スキル：freq が d（毎日）／w1・w2・w3（週1〜3回）／m1（月1回）。act の行動をチェックした回数が必要回数に届くと解放される。
+  2. 達成目標スキル：freq が g。act の目標を達成すると解放される。数字で測れるなら goalTarget（数値）・goalUnit（単位）・goalDir（up＝この数値以上で達成、down＝この数値以下で達成）を入れる。資格の合格のように数字がないものは goalTarget を書かない。
+- 同じ数字を段階的に追う達成目標（例：ベンチプレス 60kg → 80kg → 100kg）には、すべてに同じ metric（例："ベンチプレス"）を入れる。記録が共有され、一度入れた記録で届いている目標はまとめて達成になる。
+
+書き方
+- 1段目は今日から始められる小さなこと、最終は期間内に届くはっきりしたゴールにする。
+- act は、何をすればチェックできるかが一目でわかる行動を1文で書く（60文字以内、「〜する」で終える）。
+- need（必要回数）は書かない。アプリが期間に合わせて決める。「30回続けたら解放」のように特別な回数にしたいときだけ need に数字を入れる。
+- icon は Lucide のアイコン名（例：dumbbell, brain, target, book-open, messages-square, languages, heart, shield, trophy, award）。
 - 系統の name は10文字以内、en は英大文字。スキルの name は20文字以内、desc は60文字以内。
-- need は書かない（アプリが1年で届く回数を自動で決める）。
-- 引用符は半角の " を使い、skills は必ず [ ] で囲む。JSON はコードブロック1つにまとめる。
+- 引用符は半角の " を使い、skills は必ず [ ] で囲む。JSON はコードブロック1つにまとめ、前後に説明を書かない。
 
 形式
 {
   "title": "ツリーの名前",
+  "months": {{MONTHS}},
   "branches": [
     {
       "name": "系統名", "en": "ENGLISH", "color": "#86ace0",
       "skills": [
-        { "name": "スキル名", "icon": "eye", "desc": "説明", "act": "確認すること", "freq": "d" },
-        { "name": "スキル名", "icon": "target", "desc": "説明", "act": "確認すること", "freq": "g", "goalTarget": 100, "goalUnit": "kg", "goalDir": "up" }
+        { "name": "習慣スキルの例", "icon": "eye", "desc": "説明", "act": "毎日チェックする行動", "freq": "d" },
+        { "name": "週ごとの例", "icon": "book-open", "desc": "説明", "act": "週に2回やる行動", "freq": "w2" },
+        { "name": "ベンチプレス80kg", "icon": "dumbbell", "desc": "説明", "act": "ベンチプレスで80kgを挙げる", "freq": "g", "goalTarget": 80, "goalUnit": "kg", "goalDir": "up", "metric": "ベンチプレス" },
+        { "name": "資格に合格", "icon": "award", "desc": "説明", "act": "○○試験に合格する", "freq": "g" }
       ]
     }
   ]
 }`;
-  const prompt = wish => PROMPT.replace('{{WISH}}', String(wish || '').trim() || '（ここに身につけたいことを書く）');
+  const prompt = (wish, o) => { o = typeof o === 'object' && o ? o : {}; const m = +o.months || 12;
+    return PROMPT.replace('{{WISH}}', String(wish || '').trim() || '（ここに身につけたいことを書く）')
+      .split('{{MONTHS}}').join(String(m)).replace('{{STYLE}}', STYLES[o.style] || STYLES.mix); };
 
   // よくある崩れを直してから読む：“ ” などの引用符、\[ \] のようなエスケープ、末尾のカンマ、"skills" の [ ] の抜け
   function parseLoose(txt) {
@@ -361,7 +411,7 @@
   }
 
   // AI の返事（前後の文章や \`\`\`json の囲みがあってもよい）からツリーを取り出す
-  function parseTree(text) {
+  function parseTree(text, fallbackDays) {
     let raw = String(text || '').trim();
     if (!raw) return { ok: false, error: 'AIの返事が空です' };
     const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i); if (fence) raw = fence[1];
@@ -373,6 +423,8 @@
     const list = Array.isArray(d) ? d : Array.isArray(d.branches) ? d.branches : Array.isArray(d.tree) ? d.tree : null;
     if (!list || !list.length) return { ok: false, error: 'branches（系統）が入っていません' };
     const notes = [];
+    const months = +(d.months ?? d.month);
+    const period = Number.isFinite(months) && months > 0 ? monthsToDays(months) : d.period ? clampPeriod(d.period) : clampPeriod(fallbackDays || 365);
     if (list.length > MAX_BRANCHES) notes.push(`系統が${list.length}個あったので、最初の${MAX_BRANCHES}個を使います`);
     const branches = list.slice(0, MAX_BRANCHES).map((b, i) => {
       b = b || {};
@@ -383,11 +435,11 @@
       const nodes = {};
       SLOTS.forEach((s, j) => { const n = skills[j] || {};
         nodes[s] = { ...n, goalTarget: n.goalTarget ?? n.goal_target, goalUnit: n.goalUnit ?? n.goal_unit, goalDir: n.goalDir ?? n.goal_dir,
-          act: n.act ?? n.action ?? n.check, need: n.need, freq: FREQ[n.freq] ? n.freq : (n.goalTarget ?? n.goal_target) != null ? 'g' : n.freq }; });
-      return cleanBranch({ key: '', name: b.name, en: b.en ? String(b.en).toUpperCase() : '', color: b.color, nodes }, i);
+          metric: n.metric ?? n.record, act: n.act ?? n.action ?? n.check, need: n.need, freq: FREQ[n.freq] ? n.freq : (n.goalTarget ?? n.goal_target) != null ? 'g' : n.freq }; });
+      return cleanBranch({ key: '', name: b.name, en: b.en ? String(b.en).toUpperCase() : '', color: b.color, nodes }, i, period);
     });
     const title = typeof d.title === 'string' && d.title.trim() ? d.title.trim().slice(0, 40) : '';
-    return { ok: true, title, branches, notes, skills: branches.length * 6 };
+    return { ok: true, title, period, branches, notes, skills: branches.length * 6 };
   }
   // 読み取ったツリーにする。keep=true なら、同じ名前の系統は記録を引き継ぐ
   function applyTree(st, tree, keep) {
@@ -396,14 +448,15 @@
       const same = keep && old.find(o => o.name === nb.name && !used.has(o.key));
       if (same) { nb.key = same.key; used.add(same.key); } else nb.key = newKey() + used.size;
       used.add(nb.key); return nb; });
-    s.branches = branches; if (tree.title) s.title = tree.title;
+    s.branches = branches; if (tree.title) s.title = tree.title; if (tree.period) s.period = tree.period;
     const ids = new Set(branches.flatMap(b => SLOTS.map(x => b.key + x)));
-    for (const f of ['checks', 'unlocked', 'records']) for (const id in s[f]) if (!keep || !ids.has(id)) delete s[f][id];
+    for (const f of ['checks', 'unlocked', 'records']) for (const id in s[f]) if (!keep || !(ids.has(id) || (f === 'records' && id.startsWith('m:')))) delete s[f][id];
+    if (keep) cascade(s, todayKey());
     if (!keep) s.off = {};
     return { st: stamp(s), status: 'applied', kept: branches.filter(b => old.some(o => o.key === b.key)).map(b => b.name) };
   }
 
-  return { PROMPT, prompt, parseTree, applyTree, SLOTS, LEVEL, PARENTS, FREQ, RATE, SPAN, MAX_BRANCHES, yearNeed, W, H, CX, CY, pt,
+  return { PROMPT, prompt, STYLES, parseTree, applyTree, SLOTS, LEVEL, PARENTS, FREQ, RATE, SPAN, MAX_BRANCHES, yearNeed, needFor, PERIODS, periodLabel, clampPeriod, monthsToDays, setPeriod, resetNeeds, cascade, W, H, CX, CY, pt,
     keyOf, parseKey, addDays, todayKey, monOf, isDate, clone,
     fresh, blank, normalize, ctx, applyCheck, applyRecord, setOff, setTitle, addBranch, updateBranch, updateSkill, deleteBranch, yearAll, newTree, merge };
 });

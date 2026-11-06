@@ -67,7 +67,7 @@ function skillLine(c, n, day) {
 }
 function overview(st) {
   const c = K.ctx(st), P = c.progress(), t = today();
-  const lines = [`# ${st.title}`, `進み具合 ${P.pct}%・解放 ${P.unlocked}/${P.total}・最終スキル ${P.caps}/${P.branches}・連続 ${c.streak()}日`,
+  const lines = [`# ${st.title}（期間 ${K.periodLabel(st.period)}）`, `進み具合 ${P.pct}%・解放 ${P.unlocked}/${P.total}・最終スキル ${P.caps}/${P.branches}・連続 ${c.streak()}日`,
     `保存先：${useGist ? `Gist ${GIST}` : FILE}`];
   if (!st.branches.length) lines.push('', '系統がまだありません。add_branch で作ってください。');
   for (const b of st.branches) {
@@ -103,7 +103,8 @@ const skillShape = {
   need: z.number().int().min(1).max(999).optional().describe('解放に必要なチェック回数。省略すると1年ペースの回数'),
   goal_target: z.number().optional().describe('達成目標の数値（freq=g のとき）'),
   goal_unit: z.string().max(10).optional().describe('達成目標の単位（例：kg）'),
-  goal_dir: z.enum(['up', 'down']).optional().describe('up=この数値以上で達成 down=この数値以下で達成')
+  goal_dir: z.enum(['up', 'down']).optional().describe('up=この数値以上で達成 down=この数値以下で達成'),
+  metric: z.string().max(20).optional().describe('記録の名前。同じ名前の達成目標どうしで記録を共有する（例：ベンチプレス 60kg→80kg→100kg）')
 };
 const toNode = s => { const o = { ...s }; if ('goal_target' in o) { o.goalTarget = o.goal_target; delete o.goal_target; }
   if ('goal_unit' in o) { o.goalUnit = o.goal_unit; delete o.goal_unit; } if ('goal_dir' in o) { o.goalDir = o.goal_dir; delete o.goal_dir; }
@@ -130,7 +131,7 @@ server.registerTool('check', { title: '確認項目をチェックする', descr
     if (msg) return fail(msg);
     const c = K.ctx(r.st), n = c.NODES[skill_id];
     let t = r.status === 'unchanged' ? `${n.name}：すでに${r.checked ? 'チェック済み' : '未チェック'}です` : `${n.name}を${r.checked ? 'チェック' : '未チェックに'}しました（${n.freq === 'g' ? '達成目標' : `${Math.min(c.count(n.id), n.need)}/${n.need}回`}）`;
-    if (r.newly) t += `\n⚡「${n.name}」を${n.freq === 'g' ? '達成' : '解放'}しました。${r.nexts.length ? '次の確認項目：' + r.nexts.join('・') : 'この系統の最終スキルです'}`;
+    if (r.newly) t += `\n⚡「${n.name}」を${n.freq === 'g' ? '達成' : '解放'}しました。${r.chain.length ? `ほかに ${r.chain.map(i => c.NODES[i].name).join('・')} も解放。` : ''}${r.nexts.length ? '次の確認項目：' + r.nexts.join('・') : ''}`;
     return ok(t);
   });
 
@@ -142,7 +143,7 @@ server.registerTool('record_goal', { title: '達成目標の記録を入れる',
     const n = K.ctx(r.st).NODES[skill_id];
     let t = r.better ? `${n.name}：自己ベスト ${value}${n.goalUnit} を記録しました` : `${n.name}：${value}${n.goalUnit}（ベストは ${r.best}${n.goalUnit}）`;
     if (n.goalTarget != null) t += `・目標 ${n.goalTarget}${n.goalUnit}`;
-    if (r.newly) t += `\n⚡ 目標達成！「${n.name}」を解放しました`;
+    if (r.newly) { const c2 = K.ctx(r.st); t += `\n⚡ 目標達成！ ${[r.newly, ...r.chain].map(i => '「' + c2.NODES[i].name + '」').join('')}を解放しました${r.nexts.length ? '。次：' + r.nexts.join('・') : ''}`; }
     return ok(t);
   });
 
@@ -167,14 +168,20 @@ server.registerTool('import_tree', { title: 'JSON でツリーを入れかえる
   inputSchema: { tree_json: z.string().describe('ツリーの JSON（AI の返事をそのまま渡してもよい）'), keep_records: z.boolean().default(true), confirm: z.literal(true) },
   annotations: { destructiveHint: true } },
   async ({ tree_json, keep_records }) => {
-    const t = K.parseTree(tree_json); if (!t.ok) return fail(t.error);
-    const r = await mutate(st => K.applyTree(st, t, keep_records));
+    let t; const r = await mutate(st => { t = K.parseTree(tree_json, st.period); return t.ok ? K.applyTree(st, t, keep_records) : { st }; });
+    if (!t.ok) return fail(t.error);
     return ok(`ツリーを入れかえました（${t.branches.length}系統・${t.skills}スキル）${r.kept.length ? `。記録を引き継いだ系統：${r.kept.join('・')}` : ''}${t.notes.length ? '\n' + t.notes.join('\n') : ''}\n\n` + overview(r.st));
   });
 
 server.registerTool('get_tree_format', { title: 'ツリーの JSON の形式', description: 'import_tree に渡す JSON の形式とルール（AI にツリーを作らせるときの指示文）を返す',
-  inputSchema: { wish: z.string().optional().describe('身につけたいこと（指示文に入る）') }, annotations: { readOnlyHint: true } },
-  async ({ wish }) => ok(K.prompt(wish)));
+  inputSchema: { wish: z.string().optional().describe('身につけたいこと（指示文に入る）'), months: z.number().int().min(1).max(36).default(12).describe('最終スキルまでの期間（か月）'),
+    style: z.enum(['mix', 'habit', 'goal']).default('mix').describe('mix=習慣とゴールの組み合わせ habit=習慣中心 goal=ゴール達成で進む') }, annotations: { readOnlyHint: true } },
+  async ({ wish, months, style }) => ok(K.prompt(wish, { months, style })));
+
+server.registerTool('set_period', { title: '期間を変える', description: '最終スキルまでの期間を変え、全スキルの必要回数を計算し直す。チェック回数は残り、届いていれば解放される',
+  inputSchema: { months: z.number().min(0.5).max(36).describe('か月（1=1か月, 3, 6, 12, 24 など）') } },
+  async ({ months }) => { const r = await mutate(st => K.setPeriod(st, K.monthsToDays(months))); const c = K.ctx(r.st);
+    return ok(`期間を${K.periodLabel(r.st.period)}にしました${r.unlocked.length ? `。${r.unlocked.map(i => c.NODES[i].name).join('・')} を解放` : ''}\n\n` + overview(r.st)); });
 
 server.registerTool('set_title', { title: 'タイトルを変える', inputSchema: { title: z.string().min(1).max(40) } },
   async ({ title }) => { await mutate(st => ({ st: K.setTitle(st, title) })); return ok(`タイトルを「${title}」にしました`); });

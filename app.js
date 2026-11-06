@@ -133,7 +133,7 @@ function renderTree(popId){
   }).join('');
   const P=C.progress();
   $('pctNum').innerHTML=`${P.pct}<small>%</small>`; $('pctBar').style.width=P.pct+'%';
-  $('pctTxt').textContent=P.branches?`チェックした回数でスキルが解放されます ・ 1年で最終スキルに届く目安 ・ 最終スキル ${P.caps} / ${P.branches}`:'まだ系統がありません。「編集」から系統を追加して、ツリーを作りましょう';
+  $('pctTxt').textContent=P.branches?`チェックの回数か目標の達成でスキルが解放されます ・ ${K.periodLabel(state.period)}で最終スキルに届く目安 ・ 最終スキル ${P.caps} / ${P.branches}`:'まだ系統がありません。「編集」から系統を追加して、ツリーを作りましょう';
   $('progressTxt').textContent=`${P.unlocked} / ${P.total} 解放`;
   $('title').textContent=state.title;
 }
@@ -198,7 +198,7 @@ function renderDetail(){
     $('detail').innerHTML=`<h2>${esc(state.title)}</h2>
       <div class="meta"><span class="cost">START</span><span class="br">CORE</span></div>
       <p class="desc">確認項目をチェックした回数が、そのスキルの「必要回数」に届くと自動で解放されます。解放すると、次の段のスキルが新しい確認項目になります。</p>
-      <div class="practice"><i data-lucide="calendar-range"></i><div><b>1年で最終スキルへ</b><br>必要回数は、8割のペースで続けると約1年で各系統の最終スキルに届くように決めています。「編集」でツリーの中身ごと変えられます。</div></div>
+      <div class="practice"><i data-lucide="calendar-range"></i><div><b>${K.periodLabel(state.period)}で最終スキルへ</b><br>必要回数は、8割のペースで続けると約${K.periodLabel(state.period)}で各系統の最終スキルに届くように決めています。期間は「編集」で変えられます。</div></div>
       <p class="hint">今挑戦中のスキル：${C.activeNodes().length}つ</p>`;
     return;
   }
@@ -234,7 +234,9 @@ function renderEditor(n){
       <h3>ツリー全体</h3>
       <label class="fld"><span>タイトル</span><input id="e-title" data-f="title" value="${esc(state.title)}" maxlength="40"></label>
       <button type="button" class="btn" id="addBranch"${full?' disabled':''}><i data-lucide="plus"></i>系統を追加（${state.branches.length} / ${K.MAX_BRANCHES}）</button>
-      <button type="button" class="btn ghost" id="yearAll"${state.branches.length?'':' disabled'}><i data-lucide="calendar-range"></i>全スキルの必要回数を1年ペースに戻す</button>
+      <label class="fld"><span>期間（最終スキルまで）</span><select id="e-period" data-f="period">${Object.entries(K.PERIODS).map(([d,l])=>`<option value="${d}"${+d===state.period?' selected':''}>${l}</option>`).join('')}${K.PERIODS[state.period]?'':`<option value="${state.period}" selected>${K.periodLabel(state.period)}</option>`}</select></label>
+      <p class="hint" style="margin:0">期間を変えると、全スキルの必要回数を計算し直します。チェックした回数はそのまま残り、届いていればその場で解放されます。</p>
+      <button type="button" class="btn ghost" id="yearAll"${state.branches.length?'':' disabled'}><i data-lucide="calendar-range"></i>必要回数を期間どおりに戻す</button>
       <p class="hint" style="margin:0">ツリーのスキルを押すと、そのスキルと系統を編集できます。</p>
       <h3>作り直す</h3>
       <button type="button" class="btn danger" id="newBlank"><i data-lucide="eraser"></i>空のツリーからゼロで作る</button>
@@ -264,12 +266,14 @@ function renderEditor(n){
       <label class="fld"><span>頻度</span><select id="e-freq" data-n="freq">${Object.entries(FREQ).map(([k,v])=>`<option value="${k}"${k===n.freq?' selected':''}>${v}</option>`).join('')}</select></label>
       ${n.freq==='g'?`<label class="fld"><span>目標の数値（なしでも可）</span><input id="e-gt" data-n="goalTarget" type="number" step="0.5" value="${n.goalTarget??''}" placeholder="例：100"></label>`
       :`<div class="fld"><span>必要回数（目安 約${Math.ceil(n.need/RATE[n.freq]/0.8)}日）</span>
-        <div class="needRow"><input id="e-need" data-n="need" type="number" min="1" max="999" value="${n.need}"><button type="button" id="yearOne">1年ペース：${K.yearNeed(n.level,n.freq)}</button></div></div>`}
+        <div class="needRow"><input id="e-need" data-n="need" type="number" min="1" max="999" value="${n.need}"><button type="button" id="yearOne">${K.periodLabel(state.period)}ペース：${K.needFor(n.level,n.freq,state.period)}</button></div></div>`}
     </div>
     ${n.freq==='g'?`<div class="two">
       <label class="fld"><span>単位</span><input id="e-gu" data-n="goalUnit" value="${esc(n.goalUnit)}" maxlength="10" placeholder="例：kg"></label>
       <label class="fld"><span>達成の向き</span><select id="e-gd" data-n="goalDir"><option value="up"${n.goalDir!=='down'?' selected':''}>この数値以上で達成</option><option value="down"${n.goalDir==='down'?' selected':''}>この数値以下で達成</option></select></label>
-    </div><p class="hint" style="margin:0">達成目標は1回達成すると解放されます。数値を決めておくと、詳細から記録を入れて進み具合を見られます。</p>`:''}
+    </div>
+    <label class="fld"><span>記録の名前（同じ名前の目標と記録を共有。例：ベンチプレス）</span><input id="e-metric" data-n="metric" value="${esc(n.metric||'')}" maxlength="20" placeholder="なし"></label>
+    <p class="hint" style="margin:0">達成目標は1回達成すると解放されます。数値を決めておくと、詳細から記録を入れて進み具合を見られます。</p>`:''}
     <p class="hint" style="margin:0">スキルID：<code>${n.id}</code>（MCP から操作するときに使います）</p>
     <button type="button" class="btn danger" id="delBranch"><i data-lucide="trash-2"></i>この系統を削除</button>
   </div>`;
@@ -295,7 +299,9 @@ function render(popId){ C=K.ctx(state); renderTree(popId); renderCheck(); render
 // ================= 操作 =================
 function afterUnlock(r,label){
   selected=r.newly; commit(r.st,r.newly); strike(r.newly);
-  toast(`「${C.NODES[r.newly].name}」を${label}！${r.nexts&&r.nexts.length?'次は'+r.nexts.map(x=>`「${x}」`).join(''):''}`,'zap');
+  (r.chain||[]).forEach((id,i)=>setTimeout(()=>strike(id),350*(i+1)));
+  const more=r.chain&&r.chain.length?`（ほか${r.chain.length}個もまとめて解放）`:'';
+  toast(`「${C.NODES[r.newly].name}」を${label}！${more}${r.nexts&&r.nexts.length?'次は'+r.nexts.map(x=>`「${x}」`).join(''):''}`,'zap');
 }
 function toggleCheck(id){
   const r=K.applyCheck(state,id,selDay);
@@ -318,7 +324,7 @@ function editSkill(f,v){
   const n=C.NODES[selected]; if(!n||n.id==='root') return;
   if(f==='need') v=parseInt(v,10)||1;
   const r=K.updateSkill(state,n.id,{[f]:v});
-  later(()=>{ if(r.newly){ commit(r.st,r.newly); strike(r.newly); } else commit(r.st); });
+  later(()=>{ if(r.newly){ commit(r.st,r.newly); strike(r.newly); toast(`必要回数に届いていたので「${K.ctx(r.st).NODES[r.newly].name}」を解放しました`,'zap'); } else commit(r.st); });
 }
 function editBranch(f,v){ const n=C.NODES[selected]; if(!n||!n.branch) return; const r=K.updateBranch(state,n.branch.key,{[f]:v}); later(()=>commit(r.st)); }
 let armed=null, armTimer;
@@ -341,8 +347,8 @@ document.addEventListener('click',e=>{
     case 'recBtn': saveRecord(); break;
     case 'editBtn': editing=!editing; t.classList.toggle('on',editing); t.setAttribute('aria-pressed',editing); t.querySelector('span').textContent=editing?'編集を終える':'編集'; render(); break;
     case 'addBranch': { const r=K.addBranch(state,{}); if(r.status==='added'){ selected=r.key+'1'; commit(r.st); toast('系統を追加しました。スキルを押して中身を決めましょう','plus'); } break; }
-    case 'yearAll': twoStep(t,'<i data-lucide="calendar-range"></i>全スキルの必要回数を1年ペースに戻す',()=>{ commit(K.yearAll(state)); toast('必要回数を1年ペースにしました','calendar-range'); }); break;
-    case 'yearOne': { const n=C.NODES[selected]; editSkill('need',K.yearNeed(n.level,n.freq)); break; }
+    case 'yearAll': twoStep(t,'<i data-lucide="calendar-range"></i>必要回数を期間どおりに戻す',()=>{ const r=K.resetNeeds(state); commit(r.st); toast(`必要回数を${K.periodLabel(state.period)}ペースにしました`,'calendar-range'); }); break;
+    case 'yearOne': { const n=C.NODES[selected]; editSkill('need',K.needFor(n.level,n.freq,state.period)); break; }
     case 'delBranch': twoStep(t,'<i data-lucide="trash-2"></i>この系統を削除',()=>{ const r=K.deleteBranch(state,C.NODES[selected].branch.key); selected='root'; commit(r.st); toast(`「${r.name}」を削除しました`,'trash-2'); }); break;
     case 'newBlank': twoStep(t,'<i data-lucide="eraser"></i>空のツリーからゼロで作る',()=>{ selected='root'; editing=true; commit(K.newTree('blank')); toast('空のツリーにしました。「系統を追加」から作りましょう','eraser'); }); break;
     case 'newTpl': twoStep(t,'<i data-lucide="layout-template"></i>見本のツリーで作り直す',()=>{ selected='root'; commit(K.newTree('template')); toast('見本のツリーで作り直しました','layout-template'); }); break;
@@ -360,22 +366,24 @@ document.addEventListener('change',e=>{
   if(t.dataset.n) editSkill(t.dataset.n,t.value);
   else if(t.dataset.b) editBranch(t.dataset.b,t.value);
   else if(t.dataset.f==='title'){ const v=t.value; later(()=>commit(K.setTitle(state,v))); }
+  else if(t.dataset.f==='period'){ const v=+t.value; later(()=>{ const r=K.setPeriod(state,v); if(r.unlocked.length){ selected=r.unlocked[0]; commit(r.st,r.unlocked[0]); strike(r.unlocked[0]); } else commit(r.st);
+    toast(`期間を${K.periodLabel(v)}にしました${r.unlocked.length?`（${r.unlocked.length}個のスキルを解放）`:''}`,'calendar-range'); }); }
 });
 // ---- AIでツリーを作る ----
 let aiTree=null;
 function copyPrompt(){
-  const txt=K.prompt($('aiWish').value), out=$('aiPromptOut');
+  const txt=K.prompt($('aiWish').value,{months:+$('aiMonths').value,style:$('aiStyle').value}), out=$('aiPromptOut');
   const show=()=>{ out.hidden=false; out.value=txt; out.focus(); out.select(); toast('下の欄の指示文を全選択してコピーしてください','clipboard-copy'); };
   try{ navigator.clipboard.writeText(txt).then(()=>{ out.hidden=true; toast('指示文をコピーしました。AIに貼り付けて送ってください','clipboard-copy'); },show); }catch(e){ show(); }
 }
 function previewAi(){
   const raw=$('aiPaste').value, box=$('aiPreview'), btn=$('aiApply');
   if(!raw.trim()){ aiTree=null; box.innerHTML=''; btn.disabled=true; return; }
-  const r=K.parseTree(raw);
+  const r=K.parseTree(raw,state.period);
   if(!r.ok){ aiTree=null; btn.disabled=true; box.innerHTML=`<div class="err"><i data-lucide="circle-alert"></i>${esc(r.error)}</div>`; icons(); return; }
   aiTree=r; btn.disabled=false;
   const goals=r.branches.reduce((a,b)=>a+SLOTS.filter(s=>b.nodes[s].freq==='g').length,0);
-  box.innerHTML=`<div class="ok"><i data-lucide="circle-check"></i>${r.title?`「${esc(r.title)}」 ・ `:''}${r.branches.length}系統・${r.skills}スキルを読み取りました${goals?`（達成目標 ${goals}）`:''}</div>
+  box.innerHTML=`<div class="ok"><i data-lucide="circle-check"></i>${r.title?`「${esc(r.title)}」 ・ `:''}${r.branches.length}系統・${r.skills}スキル・期間${K.periodLabel(r.period)}を読み取りました${goals?`（達成目標 ${goals}）`:''}</div>
     <ul>${r.branches.map(b=>`<li><i class="dot" style="background:${b.color}"></i><b>${esc(b.name)}</b><span>${SLOTS.map(s=>esc(b.nodes[s].name)).join(' → ')}</span></li>`).join('')}</ul>
     ${r.notes.map(n=>`<div class="note">${esc(n)}</div>`).join('')}`;
   icons();
