@@ -305,6 +305,7 @@
 - icon は Lucide のアイコン名（例：dumbbell, brain, target, book-open, messages-square, languages, heart, shield）。
 - 系統の name は10文字以内、en は英大文字。スキルの name は20文字以内、desc は60文字以内。
 - need は書かない（アプリが1年で届く回数を自動で決める）。
+- 引用符は半角の " を使い、skills は必ず [ ] で囲む。JSON はコードブロック1つにまとめる。
 
 形式
 {
@@ -321,6 +322,44 @@
 }`;
   const prompt = wish => PROMPT.replace('{{WISH}}', String(wish || '').trim() || '（ここに身につけたいことを書く）');
 
+  // よくある崩れを直してから読む：“ ” などの引用符、\[ \] のようなエスケープ、末尾のカンマ、"skills" の [ ] の抜け
+  function parseLoose(txt) {
+    const tries = [t => t, t => t.replace(/[\u201C\u201D\u201E\u201F\u2033\uFF02]/g, '"').replace(/[\u2018\u2019]/g, "'"),
+      t => t.replace(/\\([\[\]_*#()~`>-])/g, '$1'), t => t.replace(/,\s*([}\]])/g, '$1'), fixSkillArrays];
+    let t = txt;
+    for (const f of tries) { t = f(t); try { return JSON.parse(t); } catch (e) {} }
+    return null;
+  }
+  // "skills": { … }, { … } のように [ ] が抜けているとき、続くオブジェクトをまとめて [ ] で囲む
+  function fixSkillArrays(t) {
+    const re = /"(skills|nodes)"\s*:\s*\{/g; let out = '', last = 0, m;
+    while ((m = re.exec(t))) {
+      const start = m.index + m[0].length - 1;
+      if (/"\s*1\s*"\s*:/.test(t.slice(start, start + 20))) continue; // nodes: {"1": …} の正しい形
+      let i = start, end = start;
+      while (true) {
+        const e = skipObject(t, i); if (e < 0) return t;
+        end = e; let j = e; while (/\s/.test(t[j])) j++;
+        if (t[j] === ',') { let k = j + 1; while (/\s/.test(t[k])) k++; if (t[k] === '{') { i = k; continue; } }
+        break;
+      }
+      let after = end; while (/\s/.test(t[after])) after++;
+      out += t.slice(last, start) + '[' + t.slice(start, end) + ']';
+      last = end; re.lastIndex = end;
+    }
+    return out + t.slice(last);
+  }
+  function skipObject(t, i) { // t[i] は {。対応する } の次の位置を返す
+    let depth = 0, inStr = false;
+    for (; i < t.length; i++) {
+      const c = t[i];
+      if (inStr) { if (c === '\\') i++; else if (c === '"') inStr = false; continue; }
+      if (c === '"') inStr = true; else if (c === '{' || c === '[') depth++;
+      else if (c === '}' || c === ']') { depth--; if (depth === 0) return i + 1; }
+    }
+    return -1;
+  }
+
   // AI の返事（前後の文章や \`\`\`json の囲みがあってもよい）からツリーを取り出す
   function parseTree(text) {
     let raw = String(text || '').trim();
@@ -329,9 +368,8 @@
     const a = Math.min(...['{', '['].map(c => { const i = raw.indexOf(c); return i < 0 ? Infinity : i; }));
     const z = Math.max(raw.lastIndexOf('}'), raw.lastIndexOf(']'));
     if (!Number.isFinite(a) || z < a) return { ok: false, error: 'JSON が見つかりません。AIの返事をそのまま貼り付けてください' };
-    let d;
-    try { d = JSON.parse(raw.slice(a, z + 1).replace(/,\s*([}\]])/g, '$1')); }
-    catch (e) { return { ok: false, error: 'JSON の形が崩れています。AIに「正しいJSONだけで出し直して」と頼んでください' }; }
+    const d = parseLoose(raw.slice(a, z + 1));
+    if (!d) return { ok: false, error: 'JSON の形が崩れています。AIに「正しいJSONだけで出し直して」と頼んでください' };
     const list = Array.isArray(d) ? d : Array.isArray(d.branches) ? d.branches : Array.isArray(d.tree) ? d.tree : null;
     if (!list || !list.length) return { ok: false, error: 'branches（系統）が入っていません' };
     const notes = [];
